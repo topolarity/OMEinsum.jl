@@ -22,12 +22,20 @@ true
 ```
 "
 function einsum(code::AbstractEinsum, @nospecialize(xs::Tuple), size_dict::Dict=get_size_dict!(getixs(code), xs, Dict{labeltype(code),Int}()))
-    y = get_output_array(xs, map(y -> size_dict[y], getiy(code)); fillzero=true)
+    iy = getiy(code)
+    dims = ntuple(Val(length(iy))) do i
+        size_dict[iy[i]]::Int
+    end
+    y = get_output_array(xs, dims; fillzero=true)
     einsum!(code, xs, y, true, false, size_dict)
 end
 # identical to above, but more aggressively specialized
 function einsum(code::StaticEinCode, xs::Tuple, size_dict::Dict=get_size_dict!(getixs(code), xs, Dict{labeltype(code),Int}()))
-    y = get_output_array(xs, map(y -> size_dict[y], getiy(code)); fillzero=true)
+    iy = getiy(code)
+    dims = ntuple(Val(length(iy))) do i
+        size_dict[iy[i]]::Int
+    end
+    y = get_output_array(xs, dims; fillzero=true)
     einsum!(code, xs, y, true, false, size_dict)
 end
 
