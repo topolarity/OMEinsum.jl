@@ -19,21 +19,23 @@ struct DefaultRule <: EinRule{Any} end
 # trace
 # overhead ~ 0.07us
 # @benchmark OMEinsum.einsum(Tr(), $(('a', 'a')), $(()), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
-function unary_einsum!(::Tr, ix, iy, x, y::AbstractArray, sx, sy)
-    @debug "Tr" size(x)
+function unary_einsum!(::Tr, ::Val{ix}, ::Val{iy}, x, y::AbstractArray, sx, sy) where {ix, iy}
+    # @debug "Tr" size(x)
     y .= sy .* y .+ sx * tr(x)
     return y
 end
 
+Base.@assume_effects :foldable _findall(f,v) = (findall(f,v)...,)
+
 # overhead ~ 0.55us
 # @benchmark OMEinsum.einsum(Sum(), $(('a', 'b')), $(('b',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
-function unary_einsum!(::Sum, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Sum" ix => iy size(x)
-    dims = (findall(i -> i ∉ iy, ix)...,)::NTuple{length(ix)-length(iy),Int}
+function unary_einsum!(::Sum, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix, iy}
+    # @debug "Sum" ix => iy size(x)
+    dims = _findall(i -> i ∉ iy, ix)
     res = dropdims(sum(x, dims=dims), dims=dims)
-    ix1f = filter(i -> i ∈ iy, ix)::typeof(iy)
+    ix1f = filter(i -> i ∈ iy, ix)
     if ix1f != iy
-        return unary_einsum!(Permutedims(), (ix1f...,), iy, res, y, sx, sy)
+        return unary_einsum!(Permutedims(), Val((ix1f...,)), Val(iy), res, y, sx, sy)
     else
         return @flatten_addmul! sy * y + sx * res
     end
@@ -41,8 +43,8 @@ end
 
 # overhead ~ 0.53us
 # @benchmark OMEinsum.einsum(OMEinsum.Repeat(), $(('a',)), $(('a', 'b',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1))
-function unary_einsum!(::Repeat, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Repeat" ix => iy size(x)
+function unary_einsum!(::Repeat, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix, iy}
+    # @debug "Repeat" ix => iy size(x)
     ix1f = filter(i -> i ∈ ix, iy)
     shape1 = [s for (l, s) in zip(iy, size(y)) if l ∈ ix]
     shape2 = [l ∈ ix ? s : 1 for (l, s) in zip(iy, size(y))]
@@ -50,7 +52,7 @@ function unary_einsum!(::Repeat, ix, iy, x::AbstractArray, y::AbstractArray, sx,
     # TODO: avoid copy
     if ix1f != ix
         y1 = similar(x, (shape1...,))
-        unary_einsum!(Permutedims(), ix, ix1f, x, y1, true, false)
+        unary_einsum!(Permutedims(), Val(ix), Val(ix1f), x, y1, true, false)
     else
         y1 = x
     end
@@ -59,13 +61,13 @@ end
 
 # overhead ~ 0.28us
 # @benchmark OMEinsum.einsum(Diag(), $(('a', 'a')), $(('a',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
-function unary_einsum!(::Diag, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Diag" ix => iy size.(x)
+function unary_einsum!(::Diag, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix,iy}
+    # @debug "Diag" ix => iy size.(x)
     compactify!(y, x, ix, iy, sx, sy)
 end
 
 function compactify!(y, x, ix, iy, sx, sy)
-    x_in_y_locs = (Int[findfirst(==(x), iy) for x in ix]...,)
+    x_in_y_locs = map((x)->findfirst(==(x), iy), ix)
     @assert size(x) == map(loc->size(y, loc), x_in_y_locs)
     indexer = dynamic_indexer(x_in_y_locs, size(x))
     _compactify!(y, x, indexer, sx, sy)
@@ -108,22 +110,22 @@ end
 # e.g. 'ij'->'iij', left indices are unique, right are not
 # overhead ~ 0.29us
 # @benchmark OMEinsum.einsum(Duplicate(), $((('a', ),)), $(('a','a')), (x,), $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1))
-function unary_einsum!(::Duplicate, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Duplicate" ix => iy size(x)
+function unary_einsum!(::Duplicate, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix, iy}
+    # @debug "Duplicate" ix => iy size(x)
     duplicate!(y, x, ix, iy, sx, sy)
 end
 
 # overhead ~ 0.15us
 # @benchmark OMEinsum.einsum(Permutedims(), $((('a', 'b'),)), $(('b','a')), (x,), $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
-function unary_einsum!(::Permutedims, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
+function unary_einsum!(::Permutedims, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix,iy}
     perm = ntuple(i -> findfirst(==(iy[i]), ix)::Int, length(iy))
-    @debug "Permutedims" ix => iy size(x) perm
-    return tensorpermute!(y, x, perm, sx, sy)
+    # @debug "Permutedims" ix => iy size(x) perm
+    return tensorpermute!(y, x, Val(perm), sx, sy)
 end
 
 # overhead ~0.04us
 # @benchmark OMEinsum.einsum(Identity(), $((('a', 'b'),)), $(('a','b')), (x,), $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
-function unary_einsum!(::Identity, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Identity" ix => iy size(x)
+function unary_einsum!(::Identity, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix, iy}
+    # @debug "Identity" ix => iy size(x)
     @flatten_addmul! sy * y + sx * x  # NOTE: copy can not be avoided, otherwise AD may fail!
 end

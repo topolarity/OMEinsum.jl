@@ -36,7 +36,7 @@ AMDGPU.rocconvert(A::EinArray{T}) where {T} = EinArray{T}(rocconvert.(A.xs), A.x
 AMDGPU.roc(A::EinArray{T}) where {T} = EinArray{T}(cu.(A.xs), A.x_indexers, A.y_indexer, A.size, A.ICIS, A.OCIS)
 
 for TP in [:Diag, :Repeat, :Duplicate]
-    @eval function OMEinsum.unary_einsum!(::$TP, ix, iy, x::ROCArrayTypes, y::ROCArrayTypes, sx, sy)
+    @eval function OMEinsum.unary_einsum!(::$TP, ::Val{ix}, ::Val{iy}, x::ROCArrayTypes, y::ROCArrayTypes, sx, sy) where {ix,iy}
         @debug "cueinsum fallback to loop_einsum" rule ix => iy size(x)
         size_dict = OMEinsum.get_size_dict((ix, iy), (x, y))
         loop_einsum!((ix,), iy, (x,), y, sx, sy, size_dict)

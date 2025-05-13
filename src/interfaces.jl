@@ -85,7 +85,8 @@ function get_size_dict_!(ixs, sizes::AbstractVector, size_info::Dict{LT}) where 
     @inbounds for i=1:length(sizes)
         ix, s = ixs[i], sizes[i]
         length(ix) == length(s) || throw(
-            ArgumentError("indices $ix invalid for tensor with ndims = $(length(s))"))
+            ArgumentError("indices invalid for tensor with ndims = $(length(s))"))
+            # ArgumentError("indices $ix invalid for tensor with ndims = $(length(s))"))
         for j = 1:length(ix)
             k = ix[j]
             if haskey(size_info, k)
