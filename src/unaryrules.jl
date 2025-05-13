@@ -20,7 +20,7 @@ struct DefaultRule <: EinRule{Any} end
 # overhead ~ 0.07us
 # @benchmark OMEinsum.einsum(Tr(), $(('a', 'a')), $(()), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
 function unary_einsum!(::Tr, ix, iy, x, y::AbstractArray, sx, sy)
-    @debug "Tr" size(x)
+    # @debug "Tr" size(x)
     y .= sy .* y .+ sx * tr(x)
     return y
 end
@@ -28,7 +28,7 @@ end
 # overhead ~ 0.55us
 # @benchmark OMEinsum.einsum(Sum(), $(('a', 'b')), $(('b',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
 function unary_einsum!(::Sum, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Sum" ix => iy size(x)
+    # @debug "Sum" ix => iy size(x)
     dims = (findall(i -> i ∉ iy, ix)...,)::NTuple{length(ix)-length(iy),Int}
     res = dropdims(sum(x, dims=dims), dims=dims)
     ix1f = filter(i -> i ∈ iy, ix)::typeof(iy)
@@ -42,7 +42,7 @@ end
 # overhead ~ 0.53us
 # @benchmark OMEinsum.einsum(OMEinsum.Repeat(), $(('a',)), $(('a', 'b',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1))
 function unary_einsum!(::Repeat, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Repeat" ix => iy size(x)
+    # @debug "Repeat" ix => iy size(x)
     ix1f = filter(i -> i ∈ ix, iy)
     shape1 = [s for (l, s) in zip(iy, size(y)) if l ∈ ix]
     shape2 = [l ∈ ix ? s : 1 for (l, s) in zip(iy, size(y))]
@@ -60,7 +60,7 @@ end
 # overhead ~ 0.28us
 # @benchmark OMEinsum.einsum(Diag(), $(('a', 'a')), $(('a',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1,1))
 function unary_einsum!(::Diag, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Diag" ix => iy size.(x)
+    # @debug "Diag" ix => iy size.(x)
     compactify!(y, x, ix, iy, sx, sy)
 end
 
@@ -109,7 +109,7 @@ end
 # overhead ~ 0.29us
 # @benchmark OMEinsum.einsum(Duplicate(), $((('a', ),)), $(('a','a')), (x,), $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1))
 function unary_einsum!(::Duplicate, ix, iy, x::AbstractArray, y::AbstractArray, sx, sy)
-    @debug "Duplicate" ix => iy size(x)
+    # @debug "Duplicate" ix => iy size(x)
     duplicate!(y, x, ix, iy, sx, sy)
 end
 

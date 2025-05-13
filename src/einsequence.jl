@@ -201,14 +201,18 @@ The other takes an iterable of type `DynamicNestedEinsum`, `args`, as the siblin
 struct StaticNestedEinsum{LT,args,eins} <: NestedEinsum{LT}
     function StaticNestedEinsum(args::NTuple{N,StaticNestedEinsum{LT}}, eins::StaticEinCode{LT}) where {N,LT}
         @assert length(args) == length(getixs(eins))
-        new{LT,args,eins}()
+        new{LT,Tuple{typeof.(args)...},eins}()
     end
     function StaticNestedEinsum{LT}(tensorindex::Int) where {LT}
-        new{LT,(),tensorindex}()
+        new{LT,Tuple{},tensorindex}()
     end
+    StaticNestedEinsum{LT,args,eins}() where {LT,args,eins} = new{LT,args,eins}()
 end
 isleaf(::StaticNestedEinsum{LT,args,eins}) where {LT,args,eins} = eins isa Int
-siblings(::StaticNestedEinsum{LT,args}) where {LT,args} = args
+siblings(::StaticNestedEinsum{LT,args}) where {LT,args} = ntuple(Val(length(args.parameters))) do i
+    args.parameters[i]()
+end
+depth(neinsum::StaticNestedEinsum) = (args = siblings(neinsum); 1 + maximum(ntuple((i)->depth(args[i]), Val(length(args))); init=0))
 tensorindex(ne::StaticNestedEinsum{LT,args,eins}) where {LT,args,eins} = (@assert isleaf(ne); eins)
 rootcode(::StaticNestedEinsum{LT,args,eins}) where {LT,args,eins} = eins
 
@@ -229,7 +233,7 @@ function StaticNestedEinsum(ne::DynamicNestedEinsum{LT}) where LT
         StaticNestedEinsum{LT}(tensorindex(ne))
     else
         sib = siblings(ne)
-        StaticNestedEinsum(ntuple(i->StaticNestedEinsum(sib[i]),length(sib)), StaticEinCode(rootcode(ne)))
+        StaticNestedEinsum(ntuple(i->StaticNestedEinsum(sib[i]),Val(length(sib))), StaticEinCode(rootcode(ne)))
     end
 end
 function DynamicNestedEinsum(ne::StaticNestedEinsum{LT}) where LT
@@ -260,30 +264,84 @@ function (neinsum::NestedEinsum{LT})(@nospecialize(xs::AbstractArray...); size_i
     return einsum(neinsum, xs, size_dict; kwargs...)
 end
 
-function get_size_dict!(ne::NestedEinsum, @nospecialize(xs), size_info::Dict{LT}) where LT
+function get_size_dict!(ne::NestedEinsum, xs, size_info::Dict{LT}) where LT
     d = collect_ixs!(ne, Dict{Int,Vector{LT}}())
     ks = sort!(collect(keys(d)))
     ixs = [d[i] for i in ks]
+    # TODO: avoid the type-instability in this size(...)
     return get_size_dict_!(ixs, [collect(Int, size(xs[i])) for i in ks], size_info)
 end
 
-function einsum!(neinsum::NestedEinsum, @nospecialize(xs::NTuple{N,AbstractArray} where N), y, sx, sy, size_dict::Dict)
+function einsum!(neinsum::NestedEinsum, @nospecialize(xs::Tuple{Vararg{AbstractArray}}), y, sx, sy, size_dict::Dict)
     # do not use map because the static overhead is too large
     # do not use `setindex!` because we need to make the AD work
-    mxs = Vector{AbstractArray}(undef, length(siblings(neinsum)))
-    for (i, arg) in enumerate(siblings(neinsum))
-        mxs = _safe_set(mxs, i, isleaf(arg) ? xs[tensorindex(arg)] : einsum!(arg, xs, similar(y, ([size_dict[l] for l in getiy(rootcode(arg))]...,)), true, false, size_dict))
+    ixs = getixs(rootcode(neinsum))
+    args = siblings(neinsum)
+    N = length(args)
+    # use ntuple because it is unrolled for small N (≲ 15)
+    mxs = ntuple(Val(N)) do i
+        @inline # inline the closure itself
+        arg = args[i]
+        M = length(ixs[i])
+        dims = ntuple(Val(M)) do j
+            size_dict[ixs[i][j]]::Int
+        end
+        if isleaf(arg)
+            xs[tensorindex(arg)]::Array{Float64, M}
+        else
+            einsum!(arg, xs, similar(y, dims), true, false, size_dict)::Array{Float64, M}
+        end
     end
-    return einsum!(rootcode(neinsum), (mxs...,), y, sx, sy, size_dict)
+    O = length(getiy(rootcode(neinsum)))
+    return einsum!(rootcode(neinsum), mxs, y, sx, sy, size_dict)::Array{Float64, O}
 end
-function einsum(neinsum::NestedEinsum, @nospecialize(xs::NTuple{N,AbstractArray} where N), size_dict::Dict)
+function einsum(neinsum::NestedEinsum, @nospecialize(xs::Tuple{Vararg{AbstractArray}}), size_dict::Dict)
     # do not use map because the static overhead is too large
     # do not use `setindex!` because we need to make the AD work
-    mxs = Vector{AbstractArray}(undef, length(siblings(neinsum)))
-    for (i, arg) in enumerate(siblings(neinsum))
-        mxs = _safe_set(mxs, i, isleaf(arg) ? xs[tensorindex(arg)] : einsum(arg, xs, size_dict))
+    ixs = getixs(rootcode(neinsum))
+    args = siblings(neinsum)
+    N = length(args)
+    # use ntuple because it is unrolled for small N (≲ 15)
+    mxs = ntuple(Val(N)) do i
+        @inline # inline the closure itself
+        arg = args[i]
+        M = length(ixs[i])
+        if isleaf(arg)
+            xs[tensorindex(arg)]::Array{Float64, M}
+        else
+            einsum(arg, xs, size_dict)::Array{Float64, M}
+        end
     end
-    return einsum(rootcode(neinsum), (mxs...,), size_dict)
+    # TODO: Track array type T
+    O = length(getiy(rootcode(neinsum)))
+    return einsum(rootcode(neinsum), mxs, size_dict)::Array{Float64, O}
+end
+einsum(neinsum::Int8, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict) where {LT, args} = nothing
+einsum(neinsum::UInt8, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict) where {LT, args} = nothing
+einsum(neinsum::UInt16, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict) where {LT, args} = nothing
+einsum(neinsum::UInt32, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict) where {LT, args} = nothing
+einsum(neinsum::UInt64, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict) where {LT, args} = nothing
+function einsum(neinsum::StaticNestedEinsum, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict)
+    # do not use map because the static overhead is too large
+    # do not use `setindex!` because we need to make the AD work
+    args = siblings(neinsum)
+    N = length(args)
+    # use ntuple because it is unrolled for small N (≲ 15)
+    mxs = ntuple(Val(N)) do i
+        @inline # inline the closure itself
+        # arg = args[i]
+        arg = (args..., Core.compilerbarrier(:type, nothing))[i]
+        ixs = getixs(rootcode(neinsum))
+        M = length(ixs[i])
+        if isleaf(arg)
+            xs[tensorindex(arg)]::Array{Float64, M}
+        else
+            einsum(arg, xs, size_dict)::Array{Float64, M}
+        end
+    end
+    # TODO: Track array type T
+    O = length(getiy(rootcode(neinsum)))
+    return einsum(rootcode(neinsum), mxs, size_dict)::Array{Float64, O}
 end
 
 _safe_set(lst, i, y) = (lst[i] = y; lst)
@@ -306,7 +364,7 @@ function Base.show(io::IO, e::EinCode)
     print(io, s)
 end
 function Base.show(io::IO, e::NestedEinsum)
-    print_tree(io, e)
+    print(io, "NestedEinsum(depth=", depth(e), ")")
 end
 Base.show(io::IO, ::MIME"text/plain", e::NestedEinsum) = show(io, e)
 Base.show(io::IO, ::MIME"text/plain", e::EinCode) = show(io, e)
