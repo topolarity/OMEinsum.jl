@@ -20,8 +20,8 @@ end
 
 @testset "tensorpermute" begin
     a = randn(100, 100)
-    @test OMEinsum.tensorpermute!(zero(a), a, [1,2], true, false) == a
-    @test OMEinsum.tensorpermute!(zero(a), a, (2,1), true, false) == transpose(a)
+    @test OMEinsum.tensorpermute!(zero(a), a, Val((1,2)), true, false) == a
+    @test OMEinsum.tensorpermute!(zero(a), a, Val((2,1)), true, false) == transpose(a)
 end
 
 @testset "align_types" begin

@@ -9,7 +9,7 @@ function loop_einsum(code::EinCode, xs::NTuple{N, AbstractArray{<:Any,M} where M
                 size_dict) where {N}
     iy = getiy(code)
     size = getindex.(Ref(size_dict), iy)
-    loop_einsum!(getixs(code), getiy(code), xs, get_output_array(xs, size; fillzero=false), true, false, size_dict)
+    loop_einsum!(Val(getixs(code)), Val(iy), xs, get_output_array(xs, size; fillzero=false), true, false, size_dict)
 end
 
 """
@@ -22,7 +22,7 @@ function loop_einsum!(::Val{ixs}, ::Val{iy},
                 xs::NTuple{N, AbstractArray{<:Any,M} where M},
                 y::AbstractArray{T,L}, sx, sy, size_dict) where {ixs,iy,N,L,T}
     ALLOW_LOOPS[] || error("using `loop_einsum` is forbidden") # code: ($(join(ixs, ", "))) -> $iy")
-    A = einarray(Val((Tuple.(ixs)...,)), Val((iy...,)), xs, size_dict)
+    A = einarray(Val(ixs), Val(iy), xs, size_dict)
     if iszero(sy)
         fill!(y, zero(T))
     elseif !isone(sy)

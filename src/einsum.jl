@@ -107,7 +107,8 @@ function einsum!(::Val{ixs}, ::Val{iy}, xs::NTuple{1,Any}, y, sx, sy, size_dict:
         return y
     end
 
-    lasttensor = Ref{Array{Float64}}(xs[1])
+    T = eltype(xs[1])
+    lasttensor = Ref{Array{T}}(xs[1])
     dims_sizes = (
         ntuple(Val(length(pipeline))) do k
             op = (pipeline..., Core.compilerbarrier(:type, nothing))[k]
@@ -120,7 +121,7 @@ function einsum!(::Val{ixs}, ::Val{iy}, xs::NTuple{1,Any}, y, sx, sy, size_dict:
         op = (pipeline..., Core.compilerbarrier(:type, nothing))[k]
         if k == length(pipeline)  # last operation
             N = length(op.ix)
-            unary_einsum!(op.type, Val(op.ix), Val(op.iy), lasttensor[]::Array{Float64,N}, y, sx, sy)
+            unary_einsum!(op.type, Val(op.ix), Val(op.iy), lasttensor[]::Array{T,N}, y, sx, sy)
         else
             dims = let iy = op.iy
                 ntuple(dims_sizes[k]) do l
@@ -129,7 +130,7 @@ function einsum!(::Val{ixs}, ::Val{iy}, xs::NTuple{1,Any}, y, sx, sy, size_dict:
             end
             cache = similar(y, dims)
             N = length(op.ix)
-            unary_einsum!(op.type, Val(op.ix), Val(op.iy), lasttensor[]::Array{Float64,N}, cache, true, false)
+            unary_einsum!(op.type, Val(op.ix), Val(op.iy), lasttensor[]::Array{T,N}, cache, true, false)
             lasttensor[] = cache
         end
     end

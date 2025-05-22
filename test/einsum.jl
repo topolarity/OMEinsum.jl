@@ -31,25 +31,25 @@ Base.Complex{T}(a::Basic) where T = T(real(a)) + im*T(imag(a))
     iy = (3,5,1,1,2,5)
     y = randn(3,5,3,3,3,5)
     # Diag, Sum, Repeat, Duplicate
-    @test einsum!((ix,), iy, (x,), y, true, false, size_dict) ≈ loop_einsum(EinCode((ix,), iy), (x,), size_dict)
+    @test einsum!(Val((ix,)), Val(iy), (x,), y, true, false, size_dict) ≈ loop_einsum(EinCode((ix,), iy), (x,), size_dict)
     ix = (1,2,3,4)
     x = randn(3,3,3,4)
     iy = (4,3,1,2)
     y = randn(4,3,3,3)
     # Permutedims
-    @test einsum!((ix,), iy, (x,), y, true, false, size_dict) ≈ loop_einsum(EinCode((ix,), iy), (x,), size_dict)
+    @test einsum!(Val((ix,)), Val(iy), (x,), y, true, false, size_dict) ≈ loop_einsum(EinCode((ix,), iy), (x,), size_dict)
     # None
     ix = (1,2,3,4)
     x = randn(3,3,3,4)
     iy = (1,2,3,4)
     y = randn(3,3,3,4)
-    @test einsum!((ix,), iy, (x,), y, true, false, size_dict) ≈ loop_einsum(EinCode((ix,), iy), (x,), size_dict)
+    @test einsum!(Val((ix,)), Val(iy), (x,), y, true, false, size_dict) ≈ loop_einsum(EinCode((ix,), iy), (x,), size_dict)
     # tr
     ix = (1,1)
     x = randn(3,3)
     iy = ()
     y = fill(1.0)
-    @test einsum!((ix,), iy, (x,), y, true, false, size_dict)[] ≈ tr(x)
+    @test einsum!(Val((ix,)), Val(iy), (x,), y, true, false, size_dict)[] ≈ tr(x)
 end
 
 @testset "binary einsum" begin
@@ -60,9 +60,9 @@ end
     y = randn(3,5,3,3,3,5)
     iz = (1,2,3,4,5,5)
     z = randn(3,3,3,4,5,5)
-    @test einsum!((ix, iy), iz, (x, y), z, true, false, size_dict) ≈ loop_einsum(EinCode((ix, iy), iz), (x, y), size_dict)
-    @test einsum!((ix, iy), iz, (x, y), copy(z), 5.0, 3.0, size_dict) ≈ loop_einsum!((ix, iy), iz, (x, y), copy(z), 5.0, 3.0, size_dict)
-    @test einsum!((ix, iy), iz, (x, y), copy(z), 5.0, 1.0, size_dict) ≈ loop_einsum!((ix, iy), iz, (x, y), copy(z), 5.0, 1.0, size_dict)
+    @test einsum!(Val((ix, iy)), Val(iz), (x, y), z, true, false, size_dict) ≈ loop_einsum(EinCode((ix, iy), iz), (x, y), size_dict)
+    @test einsum!(Val((ix, iy)), Val(iz), (x, y), copy(z), 5.0, 3.0, size_dict) ≈ loop_einsum!(Val((ix, iy)), Val(iz), (x, y), copy(z), 5.0, 3.0, size_dict)
+    @test einsum!(Val((ix, iy)), Val(iz), (x, y), copy(z), 5.0, 1.0, size_dict) ≈ loop_einsum!(Val((ix, iy)), Val(iz), (x, y), copy(z), 5.0, 1.0, size_dict)
 end
 
 @testset "nary, einsum" begin
@@ -73,7 +73,7 @@ end
     y = randn(3,5,3)
     iz = (1,2,3,4,5,5)
     z = randn(3,3,3,4,5,5)
-    @test einsum!((ix, iy, iz), (), (x, y, z), fill(1.0), true, false, size_dict) ≈ loop_einsum(EinCode((ix, iy, iz), ()), (x, y, z), size_dict)
+    @test einsum!(Val((ix, iy, iz)), Val(()), (x, y, z), fill(1.0), true, false, size_dict) ≈ loop_einsum(EinCode((ix, iy, iz), ()), (x, y, z), size_dict)
 end
 
 @testset "get output array" begin

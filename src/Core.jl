@@ -103,8 +103,9 @@ end
 # forward from EinCode, for compatibility
 EinCode(ixs, iy) = DynamicEinCode(ixs, iy)
 
-getixs(code::DynamicEinCode) = code.ixs
-getiy(code::DynamicEinCode) = code.iy
+# TODO: Maybe change field type
+getixs(code::DynamicEinCode) = (Tuple.(code.ixs)...,)
+getiy(code::DynamicEinCode) = Tuple(code.iy)
 labeltype(::DynamicEinCode{LT}) where LT = LT
 getixsv(code::DynamicEinCode) = code.ixs
 getiyv(code::DynamicEinCode) = code.iy
