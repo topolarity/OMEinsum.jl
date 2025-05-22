@@ -279,6 +279,7 @@ function einsum!(neinsum::NestedEinsum, xs::Tuple{Vararg{AbstractArray}}, y, sx,
     args = siblings(neinsum)
     N = length(args)
     T = eltype(xs[1]) # TODO: promote eltype?
+    AT = (xs[1] isa Array{T} && y isa Array{T}) ? Array{T} : AbstractArray{T}
     # use ntuple because it is unrolled for small N (≲ 15)
     mxs = ntuple(Val(N)) do i
         @inline # inline the closure itself
@@ -288,13 +289,13 @@ function einsum!(neinsum::NestedEinsum, xs::Tuple{Vararg{AbstractArray}}, y, sx,
             size_dict[ixs[i][j]]::Int
         end
         if isleaf(arg)
-            xs[tensorindex(arg)]::Array{T, M}
+            xs[tensorindex(arg)]::AT{M}
         else
-            einsum!(arg, xs, similar(y, dims), true, false, size_dict)::Array{T, M}
+            einsum!(arg, xs, similar(y, dims), true, false, size_dict)::AT{M}
         end
     end
     O = length(getiy(rootcode(neinsum)))
-    return einsum!(rootcode(neinsum), mxs, y, sx, sy, size_dict)::Array{T, O}
+    return einsum!(rootcode(neinsum), mxs, y, sx, sy, size_dict)::AT{O}
 end
 function einsum(neinsum::NestedEinsum, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict)
     # do not use map because the static overhead is too large
@@ -303,19 +304,20 @@ function einsum(neinsum::NestedEinsum, xs::Tuple{Vararg{AbstractArray}}, size_di
     args = siblings(neinsum)
     N = length(args)
     T = eltype(xs[1]) # TODO: promote eltype?
+    AT = xs[1] isa Array{T} ? Array{T} : AbstractArray{T}
     # use ntuple because it is unrolled for small N (≲ 15)
     mxs = ntuple(Val(N)) do i
         @inline # inline the closure itself
         arg = args[i]
         M = length(ixs[i])
         if isleaf(arg)
-            xs[tensorindex(arg)]::Array{T, M}
+            xs[tensorindex(arg)]::AT{M}
         else
-            einsum(arg, xs, size_dict)::Array{T, M}
+            einsum(arg, xs, size_dict)::AT{M}
         end
     end
     O = length(getiy(rootcode(neinsum)))
-    return einsum(rootcode(neinsum), mxs, size_dict)::Array{T, O}
+    return einsum(rootcode(neinsum), mxs, size_dict)::AT{O}
 end
 function einsum(neinsum::StaticNestedEinsum, xs::Tuple{Vararg{AbstractArray}}, size_dict::Dict)
     # do not use map because the static overhead is too large
@@ -323,6 +325,7 @@ function einsum(neinsum::StaticNestedEinsum, xs::Tuple{Vararg{AbstractArray}}, s
     args = siblings(neinsum)
     N = length(args)
     T = eltype(xs[1])
+    AT = xs[1] isa Array{T} ? Array{T} : AbstractArray{T}
     # use ntuple because it is unrolled for small N (≲ 15)
     mxs = ntuple(Val(N)) do i
         @inline # inline the closure itself
@@ -331,13 +334,13 @@ function einsum(neinsum::StaticNestedEinsum, xs::Tuple{Vararg{AbstractArray}}, s
         ixs = getixs(rootcode(neinsum))
         M = length(ixs[i])
         if isleaf(arg)
-            xs[tensorindex(arg)]::Array{T, M}
+            xs[tensorindex(arg)]::AT{M}
         else
-            einsum(arg, xs, size_dict)::Array{T, M}
+            einsum(arg, xs, size_dict)::AT{M}
         end
     end
     O = length(getiy(rootcode(neinsum)))
-    return einsum(rootcode(neinsum), mxs, size_dict)::Array{T, O}
+    return einsum(rootcode(neinsum), mxs, size_dict)::AT{O}
 end
 
 _safe_set(lst, i, y) = (lst[i] = y; lst)
