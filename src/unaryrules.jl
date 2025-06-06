@@ -45,18 +45,28 @@ end
 # @benchmark OMEinsum.einsum(OMEinsum.Repeat(), $(('a',)), $(('a', 'b',)), x, $(Dict('a'=>1, 'b'=>1))) setup=(x=randn(1))
 function unary_einsum!(::Repeat, ::Val{ix}, ::Val{iy}, x::AbstractArray, y::AbstractArray, sx, sy) where {ix, iy}
     # @debug "Repeat" ix => iy size(x)
-    ix1f = filter(i -> i ∈ ix, iy)
-    shape1 = [s for (l, s) in zip(iy, size(y)) if l ∈ ix]
-    shape2 = [l ∈ ix ? s : 1 for (l, s) in zip(iy, size(y))]
-    repeat_dims = [l ∈ ix ? 1 : s for (l, s) in zip(iy, size(y))]
+
+    y_size = size(y)
+    yinfo = ntuple(length(iy)) do i
+        (iy[i], y_size[i])
+    end
+    yinfo′ = filter(it -> it[1] ∈ ix, yinfo)
+    ix1f   = map(it -> it[1], yinfo′)
+    shape1 = map(it -> it[2], yinfo′)
+    shape2 = ntuple(length(iy)) do i
+        iy[i] ∈ ix ? y_size[i] : 1
+    end
+    repeat_dims = ntuple(length(iy)) do i
+        iy[i] ∈ ix ? 1 : y_size[i]
+    end
     # TODO: avoid copy
     if ix1f != ix
-        y1 = similar(x, (shape1...,))
+        y1 = similar(x, shape1)
         unary_einsum!(Permutedims(), Val(ix), Val(ix1f), x, y1, true, false)
     else
         y1 = x
     end
-    @flatten_addmul! sy * y + sx * repeat(reshape(y1, shape2...), repeat_dims...)
+    @flatten_addmul! sy * y + sx * repeat(reshape(y1, shape2), repeat_dims...)
 end
 
 # overhead ~ 0.28us

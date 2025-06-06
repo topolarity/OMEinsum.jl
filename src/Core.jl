@@ -113,6 +113,7 @@ getiyv(code::DynamicEinCode) = code.iy
 # conversion
 DynamicEinCode(::StaticEinCode{LT,ixs,iy}) where {LT,ixs, iy} = DynamicEinCode([collect(LT,ix) for ix in ixs], collect(LT,iy))
 StaticEinCode(code::DynamicEinCode{LT}) where LT = StaticEinCode{LT,(Tuple.(code.ixs)...,), (code.iy...,)}()
+StaticEinCode(ixs, iy) = StaticEinCode(DynamicEinCode(ixs, iy))
 
 """
     EinIndexer{locs,N}
