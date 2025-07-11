@@ -118,44 +118,35 @@ function align_eltypes(xs::AbstractArray{T}...) where {T}
     xs
 end
 
+# like Base.sortperm, but returns a Tuple instead of a Vector
+Base.@assume_effects :foldable _sortperm(v) = (sortperm(Int[v...])...,)
+
 """
     tensorpermute(A, perm)
 
 `permutedims(A, perm)` with grouped dimensions.
 """
-function tensorpermute!(C::AbstractArray{T,N}, A::AbstractArray{T,N}, perm, sx, sy) where {T,N}
+function tensorpermute!(C::AbstractArray{T,N}, A::AbstractArray{T,N}, ::Val{perm}, sx, sy) where {T,N,perm}
     @assert N == length(perm) && all(p -> 1 <= p <= N, perm)
     N == 0 && return copy(A)
+
+    newperm = _unique(perm)
+    newshape = ntuple(Val(length(newperm))) do g
+        prod(ntuple(Val(length(perm))) do i
+             perm[i] == newperm[g] ? size(A, i) : 1
+        end)
+    end
     # group `perm`s
-    newshape_slots = fill(-1, N)
-    dk = 1  # the size of dimension-batch
-    @inbounds begin
-        permk = perm[1]
-        newperm = [permk]
-        newshape_slots[permk] = size(A, permk)
-    end
-    @inbounds for i = 2:N
-        permi = perm[i]
-        if permi == permk + dk  # same group
-            newshape_slots[permk] *= size(A, permi)
-            dk += 1
+    let newperm = _sortperm(_sortperm(newperm))
+        A_ = reshape(A, newshape)
+        permed_shape = ntuple(i -> size(A_, @inbounds newperm[i]), ndims(A_))
+        if iszero(sy)
+            permutedims!(reshape(C, permed_shape), A_, newperm)
+            !isone(sx) && lmul!(sx, C)
+            return C
         else
-            permk = permi
-            newshape_slots[permk] = size(A, permi)
-            push!(newperm, permk)
-            dk = 1
+            return @flatten_addmul! sy * C + sx * permutedims(A_, newperm)
         end
-    end
-    newshape = filter(!=(-1), newshape_slots)
-    newperm = sortperm(sortperm(newperm))
-    A_ = reshape(A, newshape...)
-    permed_shape = ntuple(i -> size(A_, @inbounds newperm[i]), ndims(A_))
-    if iszero(sy)
-        permutedims!(reshape(C, permed_shape), A_, newperm)
-        !isone(sx) && lmul!(sx, C)
-        return C
-    else
-        return @flatten_addmul! sy * C + sx * permutedims(A_, newperm)
     end
 end
 

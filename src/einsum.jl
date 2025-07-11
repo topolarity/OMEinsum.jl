@@ -87,10 +87,10 @@ function einsum!(ixs, iy, @nospecialize(xs::NTuple{1,Any}), @nospecialize(y), sx
     lasttensor = xs[1]
     for (k, op) in enumerate(pipeline)
         if k == length(pipeline)  # last operation
-            unary_einsum!(op.type, op.ix, op.iy, lasttensor, y, sx, sy)
+            unary_einsum!(op.type, Val(op.ix), Val(op.iy), lasttensor, y, sx, sy)
         else
             cache = similar(y, ([size_dict[l] for l in op.iy]...,))
-            unary_einsum!(op.type, op.ix, op.iy, lasttensor, cache, true, false)
+            unary_einsum!(op.type, Val(op.ix), Val(op.iy), lasttensor, cache, true, false)
             lasttensor = cache
         end
     end
